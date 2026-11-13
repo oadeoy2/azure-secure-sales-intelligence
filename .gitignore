@@ -1,0 +1,41 @@
+# Terraform runtime/state and secrets
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+crash.log
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+.azure/
+
+# Local, private coaching, notes, recording and publication drafts
+.private/
+.local/
+local-only/
+private-notes/
+coaching/
+outreach/drafts/
+media/drafts/
+docs/private/
+docs/reference/private/
+evidence/**/raw/
+evidence/**/secrets/
+*.transcript.txt
+
+# Python and editor tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vscode/settings.json
+.DS_Store
+Thumbs.db

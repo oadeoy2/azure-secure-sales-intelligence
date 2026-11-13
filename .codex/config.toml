@@ -1,0 +1,4 @@
+# Project-scoped custom agents. The primary Codex session coordinates these roles.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 4
