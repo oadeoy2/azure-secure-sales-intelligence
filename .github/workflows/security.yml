@@ -34,5 +34,7 @@ jobs:
           echo "$RUNNER_TEMP/security-bin" >> "$GITHUB_PATH"
       - name: Workflow trust boundaries and private-plan negative fixtures
         run: python security/tests/test_workflow_security.py
+      - name: Offline OIDC smoke claim and network-boundary regressions
+        run: python security/tests/test_oidc_smoke.py
       - name: Baseline and named negative security tests
         run: python security/tests/run_security_checks.py
