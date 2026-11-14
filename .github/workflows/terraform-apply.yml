@@ -1,0 +1,92 @@
+name: Approved lab Terraform apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Exact main commit reviewed with the private binary plan
+        type: string
+        required: true
+      plan_run_id:
+        description: Run ID of the separately completed manual plan workflow
+        type: string
+        required: true
+      reviewed_plan_sha256:
+        description: SHA256 of the reviewed private binary plan
+        type: string
+        required: true
+      confirmation:
+        description: Type APPLY_REVIEWED_LAB_PLAN after separate Lead Architect approval
+        type: string
+        required: true
+      approval_record:
+        description: Approval reference only; dispatch inputs are public, never paste private evidence
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-lab-state
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && vars.WORKFLOW_APPLY_ENABLED == 'true' && inputs.reviewed_commit == github.sha && inputs.confirmation == 'APPLY_REVIEWED_LAB_PLAN'
+    environment: lab-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      STATE_STORAGE_ACCOUNT: ${{ vars.STATE_STORAGE_ACCOUNT }}
+      TF_VAR_resource_group_name: ${{ vars.LAB_RESOURCE_GROUP_NAME }}
+      TF_VAR_workspace_name: ${{ vars.LOG_ANALYTICS_WORKSPACE_NAME }}
+      TF_VAR_daily_quota_gb: ${{ vars.LOG_ANALYTICS_DAILY_QUOTA_GB }}
+      TF_VAR_tags: ${{ vars.LAB_TAGS_JSON }}
+      ENVIRONMENT_PROTECTION_CONFIRMED: ${{ vars.ENVIRONMENT_PROTECTION_CONFIRMED }}
+      APPROVAL_MODE: ${{ vars.APPROVAL_MODE }}
+      REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+      PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+      REVIEWED_PLAN_SHA256: ${{ inputs.reviewed_plan_sha256 }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      APPROVAL_RECORD: ${{ inputs.approval_record }}
+    steps:
+      - name: Require approval and protected deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$ENVIRONMENT_PROTECTION_CONFIRMED" = true || { echo 'Verify main-only environment restrictions first.'; exit 1; }
+          [[ "$APPROVAL_MODE" == independent-reviewer || "$APPROVAL_MODE" == manual-lead-architect ]] || { echo 'Select and document an approved review mode.'; exit 1; }
+          [[ "$REVIEWED_COMMIT" =~ ^[[:xdigit:]]{40}$ && "$REVIEWED_COMMIT" == "$GITHUB_SHA" && "$PLAN_RUN_ID" =~ ^[0-9]+$ && "$REVIEWED_PLAN_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo 'Reviewed plan coordinates are invalid.'; exit 1; }
+          test "$CONFIRMATION" = APPLY_REVIEWED_LAB_PLAN && test -n "$APPROVAL_RECORD" || { echo 'Approval record and typed confirmation required.'; exit 1; }
+          for name in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID STATE_STORAGE_ACCOUNT TF_VAR_resource_group_name TF_VAR_workspace_name TF_VAR_daily_quota_gb TF_VAR_tags; do
+            test -n "${!name}" || { echo "Missing required deployment setting: $name"; exit 1; }
+          done
+          # manual-lead-architect records owner dispatch and an external approval
+          # record. It does NOT enforce an independent second human reviewer.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.15.2
+          terraform_wrapper: false
+      - name: Authenticate the approved deployment identity
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Apply only the privately stored reviewed binary
+        working-directory: infra/environments/lab
+        shell: bash
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/apply-lab.sh"
