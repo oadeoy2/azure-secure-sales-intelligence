@@ -36,5 +36,7 @@ jobs:
         run: python security/tests/test_workflow_security.py
       - name: Offline OIDC smoke claim and network-boundary regressions
         run: python security/tests/test_oidc_smoke.py
+      - name: Offline plan and deploy identity boundary regressions
+        run: python security/tests/test_oidc_access.py
       - name: Baseline and named negative security tests
         run: python security/tests/run_security_checks.py

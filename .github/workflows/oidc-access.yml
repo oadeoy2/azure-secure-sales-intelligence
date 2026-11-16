@@ -1,0 +1,59 @@
+name: Read-only identity boundary tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Exact reviewed main commit for these bounded identity tests
+        type: string
+        required: true
+      confirmation:
+        description: Type READ_ONLY_IDENTITY_BOUNDARY_TESTS after Lead Architect approval
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && inputs.reviewed_commit == github.sha && inputs.confirmation == 'READ_ONLY_IDENTITY_BOUNDARY_TESTS'
+    environment: lab-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OIDC_ACCESS_CONTEXT: ${{ secrets.OIDC_ACCESS_CONTEXT }}
+      IDENTITY_KIND: plan
+      REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+      ACCESS_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify plan identity access and wrong-subject rejection
+        run: python3 .github/scripts/oidc-access.py
+  deploy:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' && inputs.reviewed_commit == github.sha && inputs.confirmation == 'READ_ONLY_IDENTITY_BOUNDARY_TESTS'
+    environment: lab-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OIDC_ACCESS_CONTEXT: ${{ secrets.OIDC_ACCESS_CONTEXT }}
+      IDENTITY_KIND: deploy
+      REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+      ACCESS_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify deploy identity with resource reads and Blob properties only
+        run: python3 .github/scripts/oidc-access.py
